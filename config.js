@@ -1,3 +1,10 @@
+// Environment-specific IDs
+const isLocalhost =
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1";
+const GA_ID = isLocalhost ? "G-FAKEID" : "G-TWOJE-ID";
+const CLARITY_ID = isLocalhost ? "fakeid" : "twoje-id";
+
 // Klaro Config for Google Analytics 4 with Polish language
 var klaroConfig = {
   // Basic settings
@@ -33,43 +40,41 @@ var klaroConfig = {
       onDecline: `
         console.log("Google Analytics service has been declined by the user.");
         var gtagScript = document.createElement("script");
-        gtagScript.src = "https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXX";
+        gtagScript.src = "https://www.googletagmanager.com/gtag/js?id=${GA_ID}";
         document.head.appendChild(gtagScript);
         window.dataLayer = window.dataLayer || []; 
         function gtag() {
-        dataLayer.push(arguments);
+          dataLayer.push(arguments);
         }
         // Najpierw ustawiamy domyślne zgody
         gtag("consent", "default", {
-        ad_storage: "denied",
-        ad_user_data: "denied",
-        ad_personalization: "denied",
-        analytics_storage: "denied",
+          ad_storage: "denied",
+          ad_user_data: "denied",
+          ad_personalization: "denied",
+          analytics_storage: "denied",
         });
         // Następnie inicjalizujemy GA4
         gtag("js", new Date());
-        gtag("config", "G-XXXXXXXXX");`,
+        gtag("config", "${GA_ID}");`,
       onAccept: `
         console.log("Google Analytics service has been accepted by the user.");
         var gtagScript = document.createElement("script");
-        gtagScript.src = "https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXX";
+        gtagScript.src = "https://www.googletagmanager.com/gtag/js?id=${GA_ID}";
         document.head.appendChild(gtagScript);
         window.dataLayer = window.dataLayer || [];
         function gtag() {
-        dataLayer.push(arguments);
+          dataLayer.push(arguments);
         }
         // Najpierw ustawiamy domyślne zgody
         gtag("consent", "default", {
-        ad_storage: "denied",
-        ad_user_data: "denied",
-        ad_personalization: "denied",
-        analytics_storage: "granted",
+          ad_storage: "denied",
+          ad_user_data: "denied",
+          ad_personalization: "denied",
+          analytics_storage: "granted",
         });
         // Następnie inicjalizujemy GA4
         gtag("js", new Date());
-        gtag("config", "G-XXXXXXXXX");`,
-      onUpdate:
-        'console.log("Google Analytics service has been updated by the user.");',
+        gtag("config", "${GA_ID}");`,
     },
     {
       name: "microsoftClarity",
@@ -80,27 +85,26 @@ var klaroConfig = {
       default: false,
       optOut: false,
       onlyOnce: true,
-      onInit: 'console.log("Microsoft Clarity service has been initialized.");',
+      onInit:
+        '//console.log("Microsoft Clarity service has been initialized.");',
       onDecline: `
-        console.log("Microsoft Clarity service has been declined by the user.");
+        //console.log("Microsoft Clarity service has been declined by the user.");
         (function(c,l,a,r,i,t,y){
           c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
           t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
           y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
-        })(window, document, "clarity", "script", "abcdefghij");
+        })(window, document, "clarity", "script", "${CLARITY_ID}");
         window.clarity("consent", false);
-        console.log("Clarity consent revoked");`,
+        //console.log("Clarity consent revoked");`,
       onAccept: `
-        console.log("Microsoft Clarity service has been accepted by the user.");
+        //console.log("Microsoft Clarity service has been accepted by the user.");
         (function(c,l,a,r,i,t,y){
           c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
           t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
           y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
-        })(window, document, "clarity", "script", "abcdefghij");
+        })(window, document, "clarity", "script", "${CLARITY_ID}");
         window.clarity("consent");
-        console.log("Clarity consent granted");`,
-      onUpdate:
-        'console.log("Microsoft Clarity service has been updated by the user.");',
+        //console.log("Clarity consent granted");`,
     },
     {
       name: "cloudflareAnalytics",
@@ -163,3 +167,43 @@ var klaroConfig = {
     },
   },
 };
+
+// Upewnij się, że Klaro jest załadowane
+document.addEventListener("DOMContentLoaded", function () {
+  const manager = klaro.getManager();
+  manager.watch({
+    update: function (manager, eventType, data) {
+      if (eventType === "saveConsents") {
+        const { changes, consents, type } = data;
+        const uuid = getOrCreateKlaroUUID();
+
+        fetch("https://consent-logger.yourproject.workers.dev/", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            uuid,
+            consents,
+            page: window.location.href,
+            timestamp: new Date().toISOString(),
+          }),
+        });
+      }
+    },
+  });
+});
+
+function getOrCreateKlaroUUID() {
+  const existing = getCookie("klaro-uuid");
+  if (existing) return existing;
+
+  const newUUID = crypto.randomUUID();
+  document.cookie = `klaro-uuid=${newUUID}; path=/; max-age=31536000; SameSite=Lax; Secure`;
+  return newUUID;
+}
+
+function getCookie(name) {
+  const match = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
+  return match ? match[2] : null;
+}
